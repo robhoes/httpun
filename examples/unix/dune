@@ -1,0 +1,9 @@
+(executable
+ (libraries httpun httpun_unix httpun_examples unix threads.posix)
+ (name unix_echo_post)
+ (flags :standard -warn-error -A))
+
+(alias
+ (name examples)
+ (deps
+  (glob_files *.exe)))

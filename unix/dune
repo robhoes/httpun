@@ -1,0 +1,4 @@
+(library
+ (name httpun_unix)
+; (public_name httpun-unix)
+ (libraries unix threads bigstring-unix httpun eio gluten )) ;gluten-eio
