@@ -11,6 +11,7 @@ module Server = struct
           ~config
           ~error_handler:(error_handler client_addr)
       in
+      Printf.printf "%d: Httpun_unix.Server.create_connection_handler\n%!" Thread.(self () |> id);
       Gluten_unix.Server.create_upgradable_connection_handler
         ~read_buffer_size:config.read_buffer_size
         ~protocol:(module Httpun.Server_connection)

@@ -8,6 +8,7 @@ let error_handler (_ : Unix.sockaddr) = Httpun_examples.Server.error_handler
 let request_handler (_ : Unix.sockaddr) { Gluten.reqd; _ } =
     match Reqd.request reqd  with
     | { Request.meth = `POST; headers; _ } ->
+      Printf.printf "%d: received request\n%!" Thread.(self () |> id);
       let response =
         let content_type =
           match Headers.get headers "content-type" with
@@ -17,20 +18,23 @@ let request_handler (_ : Unix.sockaddr) { Gluten.reqd; _ } =
         Response.create
           ~headers:(Headers.of_list
             [ "content-type", content_type;
-            "transfer-encoding", "chunked"
+              "transfer-encoding", "chunked"
             (* ; "connection", "close" *)
             ]) `OK
       in
       let request_body  = Reqd.request_body reqd in
       let response_body = Reqd.respond_with_streaming reqd response in
       let rec on_read buffer ~off ~len =
+        Printf.printf "%d: on_read: %s\n%!" Thread.(self () |> id) (Bigstringaf.to_string buffer);
         Body.Writer.write_bigstring response_body buffer ~off ~len;
+        Printf.printf "%d: on_read: schedule new read\n%!" Thread.(self () |> id);
         Body.Reader.schedule_read request_body ~on_eof ~on_read;
       and on_eof () =
-        Stdlib.Format.eprintf "EOF@.";
+        Printf.printf "%d: EOF\n%!" Thread.(self () |> id);
         Body.Writer.close response_body
       in
-      Body.Reader.schedule_read (Reqd.request_body reqd) ~on_eof ~on_read
+      Printf.printf "%d: reading body\n%!" Thread.(self () |> id);
+      Body.Reader.schedule_read request_body ~on_eof ~on_read
     | _ ->
       let headers = Headers.of_list [ "connection", "close" ] in
       Reqd.respond_with_string reqd (Response.create ~headers `Method_not_allowed) ""
@@ -50,10 +54,12 @@ let main port =
   Unix.setsockopt sock Unix.SO_REUSEADDR true ;
   Unix.bind sock sockaddr ;
   Unix.listen sock 5 ;
-  Printf.printf "  echo \"Testing echo POST\" | curl -XPOST --data @- http://localhost:%d\n\n%!" port;
+  Printf.printf "%d  echo \"Testing echo POST\" | curl -XPOST --data @- http://localhost:%d\n\n%!" Thread.(self () |> id) port;
   while true do
     let s, caller = Unix.accept ~cloexec:true sock in
-    connection_handler caller s
+    Printf.printf "%d: Accepted connection\n%!" Thread.(self () |> id);
+    connection_handler caller s ;
+    Printf.printf "%d: Dispatched connection handler\n%!" Thread.(self () |> id)
   done
 
 let () =
