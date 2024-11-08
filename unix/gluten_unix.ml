@@ -115,7 +115,7 @@ module IO_loop = struct
         in
         match read_loop_step () with
         | () -> ()
-        | exception exn -> print_endline (Printexc.to_string exn) ; Runtime.report_exn t exn
+        | exception exn -> debug "%s" (Printexc.to_string exn) ; Runtime.report_exn t exn
     in
     let rec write_loop () =
       debug "write_loop";
@@ -137,7 +137,7 @@ module IO_loop = struct
       in
       match write_loop_step () with
       | () -> ()
-      | exception exn -> print_endline (Printexc.to_string exn) ; Runtime.report_exn t exn
+      | exception exn -> debug "%s" (Printexc.to_string exn) ; Runtime.report_exn t exn
     in
     let _ : Thread.t = Thread.create (fun () ->
       Runtime.yield_writer t write_loop ;
