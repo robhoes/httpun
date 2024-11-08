@@ -1,5 +1,8 @@
 module Buffer = Gluten.Buffer
 
+let debug (fmt : ('a, unit, string, 'b) format4) = Printf.ksprintf (fun s ->
+  Printf.printf "%d: %s\n%!" Thread.(self () |> id) s) fmt
+
 module IO_loop = struct
   let writev socket iovecs =
     try
@@ -8,7 +11,7 @@ module IO_loop = struct
           (fun acc { Faraday.buffer; off; len } ->
             let _ : int = 
               let b = Bigarray.Array1.sub buffer off len in
-              Printf.printf "%d: writev: %s\n%!" Thread.(self () |> id) (Bigstringaf.to_string b) ;
+              debug "writev: %s" (Bigstringaf.to_string b) ;
               Bigstring_unix.write socket ~len b
             in
             acc + len
@@ -27,7 +30,7 @@ module IO_loop = struct
           Bigarray.Array1.sub buf off len
           |> Bigstring_unix.read socket ~len
         in
-        Printf.printf "%d: read %d\n%!" Thread.(self () |> id) n ;
+        debug "read %d" n ;
         match n with
         | 0 -> raise End_of_file
         | _ -> k n
@@ -63,16 +66,16 @@ module IO_loop = struct
     -> unit
     =
    fun (module Runtime) ~read_buffer_size t socket ->
-    Printf.printf "%d: IO_loop.start\n%!"  Thread.(self () |> id);
+    debug "IO_loop.start";
     let write_closed = ref false in
     let read_buffer = Buffer.create read_buffer_size in
     let rec read_loop () =
-        Printf.printf "%d: read_loop\n%!"  Thread.(self () |> id);
+        debug "read_loop";
         let rec read_loop_step () =
-          Printf.printf "%d: read_loop_step\n%!"  Thread.(self () |> id);
+          debug "read_loop_step";
           match Runtime.next_read_operation t with
           | `Read ->
-            Printf.printf "%d: read_loop_step: read\n%!"  Thread.(self () |> id);
+            debug "read_loop_step: read";
             (match read socket read_buffer with
             | _n ->
               let (_ : int) =
@@ -88,10 +91,10 @@ module IO_loop = struct
               ());
             read_loop_step ()
           | `Yield ->
-            Printf.printf "%d: read_loop_step: yield\n%!"  Thread.(self () |> id);
+            debug "read_loop_step: yield";
             Runtime.yield_reader t read_loop
           | `Close ->
-            Printf.printf "%d: read_loop_step: close\n%!"  Thread.(self () |> id);
+            debug "read_loop_step: close";
             (match read socket read_buffer with
             | _n ->
               (* discard *)
@@ -115,20 +118,20 @@ module IO_loop = struct
         | exception exn -> print_endline (Printexc.to_string exn) ; Runtime.report_exn t exn
     in
     let rec write_loop () =
-      Printf.printf "%d: write_loop\n%!"  Thread.(self () |> id);
+      debug "write_loop";
       let rec write_loop_step () =
-        Printf.printf "%d: write_loop_step\n%!"  Thread.(self () |> id);
+        debug "write_loop_step";
         match Runtime.next_write_operation t with
         | `Write io_vectors ->
-          Printf.printf "%d: write_loop_step: write\n%!"  Thread.(self () |> id);
+          debug "write_loop_step: write";
           let write_result = writev socket io_vectors in
           Runtime.report_write_result t write_result;
           write_loop_step ()
         | `Yield ->
-          Printf.printf "%d: write_loop_step: yield\n%!"  Thread.(self () |> id);
+          debug "write_loop_step: yield";
           Runtime.yield_writer t write_loop
         | `Close _ ->
-          Printf.printf "%d: write_loop_step: close\n%!"  Thread.(self () |> id);
+          debug "write_loop_step: close";
           write_closed := true;
           shutdown socket Unix.SHUTDOWN_SEND
       in
@@ -136,15 +139,16 @@ module IO_loop = struct
       | () -> ()
       | exception exn -> print_endline (Printexc.to_string exn) ; Runtime.report_exn t exn
     in
-    let _ : Thread.t = Thread.create (fun () -> 
+    let _ : Thread.t = Thread.create (fun () -> (*
       Runtime.yield_writer t write_loop ;
       read_loop ();
-      (*
-      let read_thread = Thread.create (fun () -> read_loop (); Printf.printf "%d: ! read loop ended\n%!" Thread.(self () |> id)) () in
+    *)
+      let read_thread = Thread.create (fun () -> read_loop (); debug "! read loop ended") () in
       write_loop ();
-      Printf.printf "%d: ! write loop ended\n%!" Thread.(self () |> id);
-      Thread.join read_thread ;*)
-      Printf.printf "%d: ! closing socket\n%!" Thread.(self () |> id);
+      debug "! write loop ended";
+      Thread.join read_thread ;
+
+      debug "! closing socket";
       close socket
     ) () in
     ()
@@ -179,7 +183,7 @@ module Server = struct
         ~create:create_protocol
         (request_handler client_addr)
     in
-    Printf.printf "%d: Gluten_unix.Server.create_upgradable_connection_handler\n%!" Thread.(self () |> id);
+    debug "Gluten_unix.Server.create_upgradable_connection_handler";
     IO_loop.start
       (module Gluten.Server)
       ~read_buffer_size

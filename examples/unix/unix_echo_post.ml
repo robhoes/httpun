@@ -3,12 +3,15 @@ module Arg = Stdlib.Arg
 open Httpun_unix
 open Httpun
 
+let debug (fmt : ('a, unit, string, 'b) format4) = Printf.ksprintf (fun s ->
+  Printf.printf "%d: %s\n%!" Thread.(self () |> id) s) fmt
+
 let error_handler (_ : Unix.sockaddr) = Httpun_examples.Server.error_handler
 
 let request_handler (_ : Unix.sockaddr) { Gluten.reqd; _ } =
     match Reqd.request reqd  with
     | { Request.meth = `POST; headers; _ } ->
-      Printf.printf "%d: received request\n%!" Thread.(self () |> id);
+      debug "received POST request";
       let response =
         let content_type =
           match Headers.get headers "content-type" with
@@ -25,16 +28,21 @@ let request_handler (_ : Unix.sockaddr) { Gluten.reqd; _ } =
       let request_body  = Reqd.request_body reqd in
       let response_body = Reqd.respond_with_streaming reqd response in
       let rec on_read buffer ~off ~len =
-        Printf.printf "%d: on_read: %s\n%!" Thread.(self () |> id) (Bigstringaf.to_string buffer);
+        debug "on_read: %s" (Bigstringaf.to_string buffer);
         Body.Writer.write_bigstring response_body buffer ~off ~len;
-        Printf.printf "%d: on_read: schedule new read\n%!" Thread.(self () |> id);
+        debug "on_read: schedule new read";
         Body.Reader.schedule_read request_body ~on_eof ~on_read;
       and on_eof () =
-        Printf.printf "%d: EOF\n%!" Thread.(self () |> id);
+        debug "EOF";
         Body.Writer.close response_body
       in
-      Printf.printf "%d: reading body\n%!" Thread.(self () |> id);
+      debug "reading body";
       Body.Reader.schedule_read request_body ~on_eof ~on_read
+    | { Request.meth = `GET; target; _ } ->
+      debug "received GET request: %s" target;
+      let headers = Headers.of_list [ "content-length", String.length target |> string_of_int ] in
+      let response = Response.create ~headers `OK in
+      Reqd.respond_with_string reqd response target
     | _ ->
       let headers = Headers.of_list [ "connection", "close" ] in
       Reqd.respond_with_string reqd (Response.create ~headers `Method_not_allowed) ""
@@ -54,12 +62,12 @@ let main port =
   Unix.setsockopt sock Unix.SO_REUSEADDR true ;
   Unix.bind sock sockaddr ;
   Unix.listen sock 5 ;
-  Printf.printf "%d  echo \"Testing echo POST\" | curl -XPOST --data @- http://localhost:%d\n\n%!" Thread.(self () |> id) port;
+  debug "  echo \"Testing echo POST\" | curl -XPOST --data @- http://localhost:%d" port;
   while true do
     let s, caller = Unix.accept ~cloexec:true sock in
-    Printf.printf "%d: Accepted connection\n%!" Thread.(self () |> id);
+    debug "Accepted connection";
     connection_handler caller s ;
-    Printf.printf "%d: Dispatched connection handler\n%!" Thread.(self () |> id)
+    debug "Dispatched connection handler"
   done
 
 let () =
