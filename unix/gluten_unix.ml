@@ -139,15 +139,15 @@ module IO_loop = struct
       | () -> ()
       | exception exn -> print_endline (Printexc.to_string exn) ; Runtime.report_exn t exn
     in
-    let _ : Thread.t = Thread.create (fun () -> (*
+    let _ : Thread.t = Thread.create (fun () ->
       Runtime.yield_writer t write_loop ;
       read_loop ();
-    *)
+      (*
       let read_thread = Thread.create (fun () -> read_loop (); debug "! read loop ended") () in
       write_loop ();
       debug "! write loop ended";
       Thread.join read_thread ;
-
+*)
       debug "! closing socket";
       close socket
     ) () in
